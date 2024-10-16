@@ -12,9 +12,7 @@ When we implement modules in EXPSim, we need to use the data from NRSim to verif
 ## Current Limitation
 
 1. Only the works with C++ Eigen library. The script checks the key word "Eigen::Matrix" to identify a data block. Note that the data has a type structure `Vector<Vector<Vector<...Eigen::Matrix<>...>>>`.
-2. Only the first data block will be processed. Since this script assumes no variable name information in the logging file. For future work, in GDB, with `set trace-commands on`, the print command itself is also logged, where we can extract the variable name.
-3. Only the case that same length in all dimension is supported. In general, there can be different length for each vector container in the data structure.
-4. You can specify the file name in input argument. If not, it only searches for the files with name staring with `gdb.log`. Therefore, you should set the log file name in GDB as `gdb.log.<variablename>[.txt]`.
+4. You can specify the file name in input argument. If not, it only searches for the files staring with `gdb.log`. Therefore, you should set the log file name in GDB as `gdb.log.<variablename>[.txt]`.
 
 ## Use Example
 
@@ -23,6 +21,10 @@ When we implement modules in EXPSim, we need to use the data from NRSim to verif
 3. Put the script in the same folder as log files, and run the script without any input. This will also convert all the files in the same directory.
 
 ## CHANGELOG
+
+- v0.2
+  - Supports multi-line data and one-line data.
+  - Supports varying length of Eigen::Matrix
 
 - v0.1 initial version
   - functionality: generate `.mat` data for MATLAB from the GDB log data for Eigen library.
