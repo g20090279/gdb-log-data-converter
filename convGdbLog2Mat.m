@@ -96,6 +96,7 @@ if ~isempty(logFile)
         isFound = false;     % if a gdb log file for dump data from nrsim is found
         isOneline = false;   % if Eigen data is one-line data or spans into multiple lines
         isComplete = false;  % if the data is complete (need for multiple line)
+        tLinePrev = '';      % initialize here for the case that data appears at the first line
 
         while ischar(tLine)
             % Note 1: the data structure is always: the innermost is Eigen, capsulated by multiple std::vector.
@@ -105,8 +106,7 @@ if ~isempty(logFile)
             % Find std::vector
             if ~isFound  % searching for first line
 
-                % Detect pattern example: $2 = std::vector of length 14,
-                % Example: capacity 14 = {Eigen::Matrix<std::complex<double>,1200,2,ColMajor> (data ptr: 0x4fcfe80) = {[0,0] = {_M_value = -0.063488650798086924 + 0.10254959057443244 * I}, [1,0] = ...
+                % Detect pattern example: $2 = std::vector of length 14, capacity 14 = {Eigen::Matrix<std::complex<double>,1200,2,ColMajor> (data ptr: 0x4fcfe80) = {[0,0] = {_M_value = -0.063488650798086924 + 0.10254959057443244 * I}, [1,0] = ...
                 isValid = regexp(tLine, '\$([\d]+) = std::vector of length|\$([\d]+) = Eigen::Matrix','tokens', 'once');  % starting with std::vector or Eigen::Matrix
 
                 if isempty(isValid)
