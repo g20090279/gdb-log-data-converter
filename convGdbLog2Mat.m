@@ -49,7 +49,7 @@ function convGdbLog2Mat (fileName)
 %   - convGdbLog2Mat('~/data/') will convert all files under the directory '~/data/' with name prefix 'gdb.log.'.
 %   - Put the script in the same folder as log files, and run the script without any input. This will also convert all the files in the same directory.
 %
-% Version v0.2
+% Version v0.3
 
 logFile = {};
 
@@ -205,7 +205,7 @@ if ~isempty(logFile)
                         end
                     end
 
-                    dimEigMat = max(dimEigMatInVec);
+                    dimEigMat = max(dimEigMatInVec,[],1);
 
                     % Dimension of the data. Eigen::Matrix column-weise. Eigen data is the innermost
                     dimAll = [dimStdVec.', fliplr(dimEigMat)];   % use this format vector(outer)..vector(inner),Eigen::Matrix.numCols,Eigen::Matrix.numRows is to preserve column dimension by preventing auto-squeezing in Matlab
@@ -254,7 +254,7 @@ if ~isempty(logFile)
                         checkDataIndex;
                         if isError
                             disp(errMsg);
-                            continue;
+                            break;
                         end
 
                         % Write Data, complex-valued or real-valued
