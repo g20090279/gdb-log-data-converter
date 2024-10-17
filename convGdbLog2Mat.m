@@ -107,9 +107,9 @@ if ~isempty(logFile)
             if ~isFound  % searching for first line
 
                 % Detect pattern example: $2 = std::vector of length 14, capacity 14 = {Eigen::Matrix<std::complex<double>,1200,2,ColMajor> (data ptr: 0x4fcfe80) = {[0,0] = {_M_value = -0.063488650798086924 + 0.10254959057443244 * I}, [1,0] = ...
-                isValid = regexp(tLine, '\$([\d]+) = std::vector of length|\$([\d]+) = Eigen::Matrix','tokens', 'once');  % starting with std::vector or Eigen::Matrix
+                startInfo = regexp(tLine, '\$(?<indCommand>\d+)\s*=\s*(?<vecString>std::vector of length\s*\d+[,\s]*capacity\s+\d+\s*=\s*{)*Eigen::Matrix<[\w:<>\s]+\s*,\s*(?<eigDim1>\d+)\s*,\s*(?<eigDim2>\d+)[,\w]+>','names');
 
-                if isempty(isValid)
+                if (isempty(startInfo.eigDim1) && isempty(startInfo.eigDim2))
                     % Read the New Line and Then Continue
                     tLinePrev = tLine;
                     tLine = fgetl(fid);
@@ -117,10 +117,10 @@ if ~isempty(logFile)
                 end
 
                 % Get the GDB command index (e.g. $2), which will be used to name the file if recoding the command is not enabled in GDB
-                indCommand = str2double(isValid{1});
+                indCommand = str2double(startInfo.indCommand);
 
                 % Detect if valid Eigen data
-                resStdVec = regexp(tLine, 'std::vector of length ([\d]+), capacity ([\d]+)', 'tokens');        % must not use 'once' flag
+                resStdVec = regexp(startInfo.vecString, 'std::vector of length ([\d]+), capacity ([\d]+)', 'tokens');        % must not use 'once' flag
                 resEig = regexp(tLine, 'Eigen::Matrix<[\w:<>]+,([\d]+),([\d]+),[\w]+>', 'tokens', 'once');     % must not be empty, occurs once for multline data, and multipl for oneline data. For checking, just need to detect if it exists or not.
 
                 if ~isempty(resStdVec) || ~isempty(resEig)
