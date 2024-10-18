@@ -152,7 +152,9 @@ if ~isempty(logFile)
                         dimEigMat = regexp(tLine, 'Eigen::Matrix<[\w:<>]+,([\d]+),([\d]+),[\w]+>','tokens');  % Record all dim of Eigen::Matrix
 
                         if length(dimEigMat) ~= numElsStdVec  % #occurrence of Eigen::Matrix should equal to #elements of all std::vector
-                            error('Dimension Error: Occurrence of Eigen::Matrix is not equal the sum of std::vector elements!');
+                            disp('Error: Occurrence of Eigen::Matrix is not equal the sum of std::vector elements!');
+                            tLine = fgetl(fid);
+                            continue;
                         end
 
                         for i = 1:numElsStdVec
@@ -181,7 +183,8 @@ if ~isempty(logFile)
                             end
 
                             if length(dimEigMat) ~= 1
-                                error('Multi-line data can only have one Eigen::Matrix at one line.');
+                                disp('Multi-line data can only have one Eigen::Matrix at one line.');
+                                break;
                             end
 
                             % Record all dim of Eigen::Matrix
@@ -204,7 +207,8 @@ if ~isempty(logFile)
                         end
 
                         if cnt ~= numElsStdVec
-                            error('Dimension Error: Occurrence of Eigen::Matrix is not equal the sum of std::vector elements!');
+                            disp('Error: Occurrence of Eigen::Matrix is not equal the sum of std::vector elements!');
+                            continue;
                         else  % Full data collected
                             % Go back to first line of the data
                             fseek(fid,posFid,'bof');
