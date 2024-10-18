@@ -22,6 +22,11 @@ When we implement modules in EXPSim, we need to use the data from NRSim to verif
 
 ## CHANGELOG
 
+- v0.4 IMPORTANT UPDATE
+  - [IMPORTANT!] fix error: 'e' representing exponential is not captured.
+  - fix error in capturing the dimensions of std::vector
+  - stop throwing error handles
+
 - v0.3
   - fix error when Eigen::Matrix is not capsulated by std::vector
 

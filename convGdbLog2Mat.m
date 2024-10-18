@@ -253,7 +253,7 @@ if ~isempty(logFile)
 
                 if isOneline % No need to read next lines; support different dims in different std::vector
                     % Extract data
-                    resValue = regexp(tLine, '\[([\d]+)(?:,)?([\d]+)*\][\s]*=[\s]*(?:{_M_value[\s]*=[\s]*)?([\d.-]+)(?:[\s]*\+[\s]*)*([\d.-]+)*(?:[\s]*\*[\s]*I)*', 'tokens');
+                    resValue = regexp(tLine, '\[(\d+)(?:,)?(\d+)*\]\s*=\s*(?:{_M_value\s*=\s*)?(-?\s*\d*\.?\d*e?-?\d*)(?:\s*\+\s*)?(-?\s*\d*\.?\d*e?-?\d*)*', 'tokens');  %(?:\s*\*?\s*[Ii])
 
                     if length(resValue) ~= sum(prod(dimEigMatInVec,2))   % If didn't capture all data
                         isFound = false;
@@ -297,7 +297,7 @@ if ~isempty(logFile)
                     % Pattern 3 - matrix with complex-valued data: Eigen::Matrix<std::complex<double>,288,2,ColMajor> (data ptr: 0x1d927c0) = {[0,0] = {_M_value = 0.21752604580125023 + -0.43954164224987846 * I"
                     % Note 1: For column data, the second element of resValue is empty.
                     % Note 2: For real-valued data, the fourth element of resValue is empty.
-                    resValue = regexp(tLine, '\[([\d]+)(?:,)?([\d]+)*\][\s]*=[\s]*(?:{_M_value[\s]*=[\s]*)?([\d.-]+)(?:[\s]*\+[\s]*)*([\d.-]+)*(?:[\s]*\*[\s]*I)*', 'tokens');
+                    resValue = regexp(tLine, '\[(\d+)(?:,)?(\d+)*\]\s*=\s*(?:{_M_value\s*=\s*)?(-?\s*\d*\.?\d*e?-?\d*)(?:\s*\+\s*)?(-?\s*\d*\.?\d*e?-?\d*)*', 'tokens');
 
                     if ~isempty(resValue)
                         if length(resValue) ~= 1  % For multi-line data, only one element is present on each line.
