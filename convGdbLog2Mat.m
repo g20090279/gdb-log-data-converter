@@ -360,13 +360,8 @@ end
             currColInd = str2double(resValue{iData}{2}) + 1;
         end
 
-        if cntData == 1
-            prevRowInd = dimEigMatInVec(cntVec,1);
-            currRowInd = 1;
-        else
-            prevRowInd = currRowInd;
-            currRowInd = str2double(resValue{iData}{1}) + 1;
-        end
+        prevRowInd = currRowInd;
+        currRowInd = str2double(resValue{iData}{1}) + 1;
 
         if cntData ~= (cntVec-1)*prod(dimEigMat) + (currColInd-1)*dimEigMat(1) + currRowInd % Track global counter and the corresponding index in a column
             isFound = false;
@@ -374,7 +369,7 @@ end
             errMsg = 'Error: wrong data index!';
         end
 
-        if prevRowInd > currRowInd && prevRowInd ~= dimEigMatInVec(cntVec,1) % New column, check if lack of Eigen::Matrix column data
+        if prevRowInd > currRowInd && prevRowInd ~= dimEigMat(1)    % New column, check if lack of Eigen::Matrix data of last column
             isFound = false;
             isError = true;
             errMsg = ['Error: The ', num2str(cntVec), ' std::vector has not enough data!'];

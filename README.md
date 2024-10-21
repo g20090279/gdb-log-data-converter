@@ -20,6 +20,12 @@ When we implement modules in EXPSim, we need to use the data from NRSim to verif
 2. `convGdbLog2Mat('~/data/')` will convert all files (first data block) under the directory `~/data/` with name prefix `gdb.log.`.
 3. Put the script in the same folder as log files, and run the script without any input. This will also convert all the files in the same directory.
 
+## Testbench
+
+```
+
+```
+
 ## CHANGELOG
 
 - v0.4 IMPORTANT UPDATE
