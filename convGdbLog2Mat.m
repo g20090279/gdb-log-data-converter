@@ -238,7 +238,7 @@ if ~isempty(logFile)
 
                 if isFound
                     [~,fileName,~] = fileparts(logFile{iFile});
-                    varPrint = regexp(tLinePrev, 'p(?:rint)* ([\w\d]+)', 'tokens', 'once');
+                    varPrint = regexp(tLinePrev, 'p(?:rint)?\s*(?:[\w\d]+[->.:]+)*([\w\d]+)', 'tokens', 'once');
                     if isempty(varPrint)
                         fname = [fileName, '_var', num2str(indCommand), '.mat'];
                         disp(['Data $',num2str(indCommand),' is found! Start converting ...']);
