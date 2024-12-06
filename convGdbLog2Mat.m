@@ -223,17 +223,20 @@ if ~isempty(logFile)
                     numDimAll = length(dimAll);
 
                     % Initialize Variables
-                    logData = zeros(prod(dimAll),1);
-                    isFound = true;
-                    isComplete = false;
-                    isError = false;
-                    errMsg = '';
-                    cntData = 1; % number of elements of current Eigen::Matrix may be different from maximum number of elements among all Eigen::Matrix
-                    cntVec = 1;
-                    currColInd = 1;
-                    currRowInd = 1;
-                    prevRowInd = 1;
-                    iData = 1;
+                    logData     = zeros(prod(dimAll),1);
+                    isFound     = true;
+                    isComplete  = false;
+                    isError     = false;
+                    errMsg      = '';
+
+                    % Use following indices to check if enough data are collected for each column of a Eigen::Matrix.
+                    % Align the writing index iData when the dimension of a Eigen::Matrix is smaller than the maximum dimension (dimEigMat)
+                    cntData     = 1;      % index writing to the result matrix
+                    cntVec      = 1;      % index of std::vector, the dimension of Eigen::Matrix in this std::vector may different
+                    currColInd  = 1;      % current column index inside one Eigen::Matrix
+                    currRowInd  = 1;      % current row index inside one Eigen::Matrix
+                    prevRowInd  = 1;      % previous row index inside one Eigen::Matrix
+                    iData       = 1;      % index of all Eigen::Matrix
                 end
 
                 if isFound
@@ -385,13 +388,13 @@ end
     end
 
     function checkEnoughDataThisColumn
-        if mod(cntData-1, dimEigMat(1)) == dimEigMatInVec(cntVec,1) || mod(cntData-1, dimEigMat(1)) == 0 % Enough data for this column
-            cntData = cntData + dimEigMat(1) - dimEigMatInVec(cntVec,1);
-            currRowInd = dimEigMat(1);
-            if currColInd == dimEigMatInVec(cntVec,2)  % If the last column in the std::vector, increase std::vector index
-                cntVec = cntVec + 1;
+        if mod(cntData-1, dimEigMat(1)) == dimEigMatInVec(cntVec,1) || mod(cntData-1, dimEigMat(1)) == 0   % Enough data for this column
+            cntData     = cntData + dimEigMat(1) - dimEigMatInVec(cntVec,1);   % jump to the max row dim
+            currRowInd  = dimEigMat(1);
+            if currColInd == dimEigMatInVec(cntVec,2)  % If the last column, jump to the max col dim
+                cntData = cntData + dimEigMat(1) * ( dimEigMat(2) - dimEigMatInVec(cntVec,2) );
+                cntVec  = cntVec + 1;   % std:vector index increases 1
             end
-
             % Check if all data are captured
             if cntVec == numElsStdVec + 1
                 isComplete = true;

@@ -1,4 +1,4 @@
 .DS_Store
 .vscode
 *.asv
-gdb.log.*.mat
+gdb.log.testbench*.mat

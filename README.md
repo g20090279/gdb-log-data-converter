@@ -38,6 +38,10 @@ When we implement modules in EXPSim, we need to use the data from NRSim to verif
 
 ## CHANGELOG
 
+- 0.6
+  - fix bug for case with different Eigen::Matrix dimensions,
+  - add test case for the above case.
+
 - v0.5
   - fix error in data index checking when different size of Eigen::Matrix in std::vector element. Note that this data index checking scheme is to verify that enough data are captured for each column of Eigen::Matrix,
   - improve variable naming when prefix is present,
