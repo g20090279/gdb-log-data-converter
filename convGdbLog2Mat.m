@@ -1,4 +1,4 @@
-function convGdbLog2Mat (fileName)
+function convGdbLog2Mat (fileName, resFormat, inputMode)
 % CONVGDBLOG2MAT converts logging data from GDB into .mat file. It works 
 % with C++ Eigen library, where the data looks like 
 %          Vector < Vector < Vector < ... Eigen::Matrix<> ... > > >,
@@ -10,6 +10,13 @@ function convGdbLog2Mat (fileName)
 %
 % Inputs:
 %   - fileName: (optional) A char array specifying the file.
+%   - resFormat: the format of output data
+%       * 0: one .mat file for each data
+%       * 1: one .mat file for all data
+%       * 2: one .m file for all data
+%   - inputMode: which data types are processed
+%       * 0: convert only Eigen::Matrix data
+%       * 1: convert only all types of data
 % 
 % Outputs: (in the .mat file)
 %   - logData: The converted data with same dimension
@@ -48,12 +55,13 @@ function convGdbLog2Mat (fileName)
 %   - convGdbLog2Mat('~/data/mylog.txt') will convert the file '~/data/mylog.txt'
 %   - convGdbLog2Mat('~/data/') will convert all files under the directory '~/data/' with name prefix 'gdb.log.'.
 %   - Put the script in the same folder as log files, and run the script without any input. This will also convert all the files in the same directory.
-%
-% Version v0.3
+
+if nargin < 3, inputMode = 0; end
+if nargin < 2, resFormat = 0; end
 
 logFile = {};
 
-if nargin > 0
+if nargin > 0  % check if a specific file given, it can has any file name
     if isfile(fileName)
         logFile = {fileName};
     end
@@ -61,7 +69,7 @@ else
     fileName = '.';
 end
 
-if exist(fileName,'dir') == 7  % 7 = directory
+if exist(fileName,'dir') == 7  % 7 = directory, search all files with prefix gdb.log.
     fileSearch = [fileName,'/gdb.log.*'];
     disp(['Searching for ',fileSearch]);
     fileInfo = dir(fileSearch);
@@ -345,7 +353,7 @@ if ~isempty(logFile)
                 end
             end
 
-            % Read the New Line
+            % Read the new line
             tLine = fgetl(fid);
 
         end
