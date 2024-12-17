@@ -1,23 +1,53 @@
-# GDB Logging Data to Matlab Data Converter
+---
+Topic: GDB Logging Data to Matlab Data Converter
+Description: To convert the GDB logged Eigen::Matrix Data to Matlab .mat.
+Last Revised: Dec. 17, 2024
+---
 
-## Background
+# Background
 
-When we implement modules in EXPSim, we need to use the data from NRSim to verify the functionality by comparing the input and output. One option is to write `cout` function to print the data into files. This needs to recompile NRSim every time when a modification is added. Another option is to use the debug (here refers only to GDB) to log the data into files.
+When we implement modules in EXPSim, we need to use the data from NRSim to verify the functionality by comparing the input and output. One option is to write `cout` function to print the data into files. This needs to recompile NRSim every time when a modification is added. In addition, the changes for printing data will be gone when NRSim is updated.
 
-## Prerequisite
+To overcome these disadvantages, we can use the debugger (can be GDB, LLVM, but here refers only to GDB) to log the data into files. Moreover, the printing commands can be put into a single file, which can be used later to have full automation for data acquiring.
+
+# Generate Log Data form Debugger
 
 1. Compile NRSim in debug mode.
 2. Add [pretty printer plugin](https://gitlab.com/libeigen/eigen/-/tree/master/debug/gdb?ref_type=heads) (both for STL vector and Eigen) for GDB.
-3. (Best Practice) GDB setting
-   ```
-   (gdb) set print elements 0
-   (gdb) set trace-commands on
-   (gdb) set pagination off
-   (gdb) set logging file gdb-log/gdb.log.mydata.txt
-   (gdb) set logging enabled on
-   (gdb) print this_variable
-   (gdb) set logging enabled off
-   ```
+
+## Manual Generation
+
+In GDB, make a breakpoint at the place you want to log the data. Run the program with debug symbols until the program stops at the breakpoint. Afterwards, use the following commands to log the data into a file. Note that the commands before the first `print` function need to be exected only once.
+
+```
+(gdb) set print elements 0
+(gdb) set trace-commands on
+(gdb) set pagination off
+(gdb) set logging file gdb-log/gdb.log.mydata.txt
+(gdb) set logging enabled on
+(gdb) print this_variable
+(gdb) print that_variable
+(gdb) set logging enabled off
+```
+
+Note also that in VSCode, a prefix `-exec` before these commands has to be added.
+
+## Automatic Generation
+
+If you want to extract same data, for example, with different autorun files, probably you don't want to enter these commands again and again. Here is the instruction to setup GDB to run commands in a file automatically. An example GDB script is [extract_data.gdb](./extract_data.gdb).
+
+Two places need to be changed in this example GDB script
+
+1. Change the `<executable-file>` to the corresponding executable file `nrsim_dbg`,
+2. Change the `<autorun-file>` to a specified autorun file.
+
+GDB can run a script with `-x` option. For example,
+
+```bash
+$ gdb -x extract_data.gdb
+```
+
+We can also use VSCode by changing the setting in `launch.json` accordingly.
 
 ## Current Limitation
 
@@ -38,7 +68,7 @@ When we implement modules in EXPSim, we need to use the data from NRSim to verif
 
 ## CHANGELOG
 
-- 0.6
+- v0.6
   - fix bug for case with different Eigen::Matrix dimensions,
   - add test case for the above case.
 
