@@ -1,23 +1,24 @@
-function convGdbLog2Mat (fileName, resFormat, inputMode)
-% CONVGDBLOG2MAT converts logging data from GDB into .mat file. It works 
-% with C++ Eigen library, where the data looks like 
+function out = convGdbLog2Mat (fileName, outFileMode, inputMode)
+% CONVGDBLOG2MAT converts logging data from GDB into .mat file. It works
+% with C++ Eigen library, where the data looks like
 %          Vector < Vector < Vector < ... Eigen::Matrix<> ... > > >,
 % i.e. only one Eigen::Matrix is capsulated by multiple std::vector. Note
 % that the dimension of Eigen::Matrix in each std::vector can be different.
 %
-% This function searches only for the files staring with 'gdb.log.' if the  
+% This function searches only for the files staring with 'gdb.log.' if the
 % input argument 'fileName' is not specified.
 %
 % Inputs:
 %   - fileName: (optional) A char array specifying the file.
-%   - resFormat: the format of output data
+%   - outFileMode: the format of output data
 %       * 0: one .mat file for each data
 %       * 1: one .mat file for all data
+%       * 2: no .mat file
 %       * 2: one .m file for all data
 %   - inputMode: which data types are processed
 %       * 0: convert only Eigen::Matrix data
 %       * 1: convert only all types of data
-% 
+%
 % Outputs: (in the .mat file)
 %   - logData: The converted data with same dimension
 %   - dimStdVec: A column vector indicates number of elements for all
@@ -45,7 +46,7 @@ function convGdbLog2Mat (fileName, resFormat, inputMode)
 %       dimEigMatInVec = [
 %           12, 2     --
 %           12, 2      |--> dimStdVec(1,1,:)
-%           12, 2     -- 
+%           12, 2     --
 %           14, 1     --
 %           14, 1      |--> dimStdVec(1,2,:)
 %           14, 1     --
@@ -57,11 +58,12 @@ function convGdbLog2Mat (fileName, resFormat, inputMode)
 %   - Put the script in the same folder as log files, and run the script without any input. This will also convert all the files in the same directory.
 
 if nargin < 3, inputMode = 0; end
-if nargin < 2, resFormat = 0; end
+if nargin < 2, outFileMode = 0; end
 
-logFile = {};
+logFile = {};   % input log files, can be multiple
+out = '';
 
-if nargin > 0  % check if a specific file given, it can has any file name
+if nargin > 0 && ~isempty(fileName) % check if a specific file given, it can has any file name
     if isfile(fileName)
         logFile = {fileName};
     end
@@ -81,7 +83,11 @@ if exist(fileName,'dir') == 7  % 7 = directory, search all files with prefix gdb
             [~,fileName,fileExt] = fileparts(fileInfo(iFile).name);
             if ~strcmp(fileExt,'.mat') && strcmp(fileName(1:8),'gdb.log.')
                 cFiles = cFiles + 1; % counter
-                logFile = [logFile, [fileInfo(iFile).folder,'\' fileInfo(iFile).name]];
+                fileFullPath = [fileInfo(iFile).folder,'\' fileInfo(iFile).name];
+                if isunix
+                    fileFullPath(strfind(fileFullPath,'\')) = '/';
+                end
+                logFile = [logFile, fileFullPath];
                 continue;
             end
         end
@@ -96,7 +102,7 @@ if ~isempty(logFile)
     for iFile = 1:length(logFile)
 
         disp(['Processing File ', logFile{iFile}, ' ...']);
-
+        [~,convertingFileName,~] = fileparts(logFile{iFile});
         fid = fopen(logFile{iFile});
         tLine = fgetl(fid);
 
@@ -104,7 +110,20 @@ if ~isempty(logFile)
         isFound = false;     % if a gdb log file for dump data from nrsim is found
         isOneline = false;   % if Eigen data is one-line data or spans into multiple lines
         isComplete = false;  % if the data is complete (need for multiple line)
-        tLinePrev = '';      % initialize here for the case that data appears at the first line
+
+        % Maintain a 3-line buffer
+        % Example log setting file:                                       Example log file:
+        % | ...                                                           | ...                             |
+        % | ...                                                           | +print "IF:in_genieChannel"     |
+        % | print "IF:in_genieChannel"  ----------------------------->    | $4 = "IF:in_genieChannel"       | <- tLinePrev2
+        % | print genieChannel             (corresponding log file)       | +print genieChannel             | <- tLinePrev1
+        % | ...                                                           | $5 = Eigen::Matrix<...          | <- tLine
+        % | ...                                                           | ...                             |
+        %
+        % Print the IF name before the variable itself with the indicator
+        % characters "IF:"
+        tLinePrev2 = '';
+        tLinePrev1 = '';
 
         while ischar(tLine)
             % Note 1: the data structure is always: the innermost is Eigen, capsulated by multiple std::vector.
@@ -114,149 +133,152 @@ if ~isempty(logFile)
             % Find std::vector
             if ~isFound  % searching for first line
 
-                % Detect pattern example: $2 = std::vector of length 14, capacity 14 = {Eigen::Matrix<std::complex<double>,1200,2,ColMajor> (data ptr: 0x4fcfe80) = {[0,0] = {_M_value = -0.063488650798086924 + 0.10254959057443244 * I}, [1,0] = ...
-                startInfo = regexp(tLine, '\$(?<indCommand>\d+)\s*=\s*(?<vecString>std::vector of length\s*\d+[,\s]*capacity\s+\d+\s*=\s*{)*Eigen::Matrix<[\w:<>\s]+\s*,\s*(?<eigDim1>\d+)\s*,\s*(?<eigDim2>\d+)[,\w]+>', 'tokens', 'once');
+                % Detect pattern example: $2 = std::vector of length 14, capacity 14 = { std::vector of length 5, capacity 4 = {Eigen::Matrix<std::complex<double>,1200,2,ColMajor> (data ptr: 0x4fcfe80) = {[0,0] = {_M_value = -0.063488650798086924 + 0.10254959057443244 * I}, [1,0] = ...
+                %                          -   -------------------------------------------------------------------------------- -------------
+                %                     1st token                   2nd token                                                       3rd token
+                startInfo = regexp(tLine, '^\$(\d+)\s*=\s*(std::vector of length\s*\d+[,\s]*capacity\s+\d+\s*=\s*{)*Eigen::Matrix<[\w<>:]+,(\d+),(\d+),\w+>', 'tokens', 'once');
 
-                if isempty(startInfo)
-                    % Read the New Line and Then Continue
-                    tLinePrev = tLine;
-                    tLine = fgetl(fid);
+                if isempty(startInfo)  % if no pattern is found
+                    processNextLine;
                     continue;
                 end
 
-                if isempty(startInfo{3}) && isempty(startInfo{4})
-                    % Read the New Line and Then Continue
-                    tLinePrev = tLine;
-                    tLine = fgetl(fid);
+                if isempty(startInfo{1})  % data is valid only starting with '$numbers = '
+                    processNextLine;
                     continue;
                 end
 
-                % Get the GDB command index (e.g. $2), which will be used to name the file if recoding the command is not enabled in GDB
-                indCommand = str2double(startInfo{1});
-
-                % Detect if valid Eigen data
-                resStdVec = regexp(startInfo{2}, 'std::vector of length ([\d]+), capacity ([\d]+)', 'tokens');        % must not use 'once' flag
-                resEig = regexp(tLine, 'Eigen::Matrix<[\w:<>]+,([\d]+),([\d]+),[\w]+>', 'tokens', 'once');     % must not be empty, occurs once for multline data, and multipl for oneline data. For checking, just need to detect if it exists or not.
-
-                if ~isempty(resStdVec) || ~isempty(resEig)
-                    % Check if the data is one line or spans multiple lines
-                    numLeftBracket = sum(tLine=='{');
-                    numRightBracket = sum(tLine=='}');
-                    if numLeftBracket == numRightBracket
-                        isOneline = true;
-                    end
-
-                    % Dimensions of std::vector part, can be multiple std::vector
-                    dimStdVec = zeros(length(resStdVec),1);
-                    for i = 1:length(resStdVec)
-                        dimStdVec(i) = str2double(resStdVec{i}{1});
-                    end
-                    numElsStdVec = prod(dimStdVec);
-
-                    % Dimension of Eigen::Matrix part, it may be different for each std::vector.
-                    dimEigMatInVec = zeros(numElsStdVec, 2);
-
-                    if isOneline % Has enough info by using this line
-                        dimEigMat = regexp(tLine, 'Eigen::Matrix<[\w:<>]+,([\d]+),([\d]+),[\w]+>','tokens');  % Record all dim of Eigen::Matrix
-
-                        if length(dimEigMat) ~= numElsStdVec  % #occurrence of Eigen::Matrix should equal to #elements of all std::vector
-                            disp('Error: Occurrence of Eigen::Matrix is not equal the sum of std::vector elements!');
-                            tLine = fgetl(fid);
-                            continue;
-                        end
-
-                        for i = 1:numElsStdVec
-                            dimEigMatInVec(i,1) = str2double(dimEigMat{i}{1});
-                            dimEigMatInVec(i,2) = str2double(dimEigMat{i}{2});
-                        end
-                    else  % Need to go next lines until this data block ends or new data block begins or end of file
-                        % Save the current position
-                        posFid = ftell(fid);
-
-                        % Use the number of '{' and '}' to check if the current data block ends
-                        cnt = 0;
-                        isNewData = false;
-                        tLineTmp = tLine;
-                        while  numLeftBracket~=numRightBracket && ~isNewData && cnt<numElsStdVec
-                            % Search only for Eigen::Matrix
-                            dimEigMat = regexp(tLine, 'Eigen::Matrix<[\w:<>]+,([\d]+),([\d]+),[\w]+>','tokens');  % Record all dim of Eigen::Matrix
-
-                            % Get new line and check "{" and "}"
-                            tLine = fgetl(fid);
-                            numLeftBracket = numLeftBracket + sum(tLine=='{');
-                            numRightBracket = numRightBracket + sum(tLine=='}');
-
-                            if isempty(dimEigMat)
-                                continue;
-                            end
-
-                            if length(dimEigMat) ~= 1
-                                disp('Multi-line data can only have one Eigen::Matrix at one line.');
-                                break;
-                            end
-
-                            % Record all dim of Eigen::Matrix
-                            cnt = cnt + 1;
-                            dimEigMatInVec(cnt,1) = str2double(dimEigMat{1}{1});
-                            dimEigMatInVec(cnt,2) = str2double(dimEigMat{1}{2});
-
-                            % Check data block ending indicators. If the current data block ends, break the while.
-                            if ~ischar(tLine), isNewData = true; continue; end
-
-                            findTextGdb = regexp(tLine, 'gdb = std::vector of length','tokens', 'once');
-                            if ~isempty(findTextGdb), isNewData = true; continue; end
-
-                            findTextDollar = regexp(tLine, '\$([\d]+) = std::vector of length','tokens', 'once');
-                            if ~isempty(findTextDollar)
-                                if str2double(findTextDollar{1}) ~= indCommand
-                                    isNewData = true;
-                                end
-                            end
-                        end
-
-                        if cnt ~= numElsStdVec
-                            disp('Error: Occurrence of Eigen::Matrix is not equal the sum of std::vector elements!');
-                            continue;
-                        else  % Full data collected
-                            % Go back to first line of the data
-                            fseek(fid,posFid,'bof');
-                            tLine = tLineTmp;
-                        end
-                    end
-
-                    dimEigMat = max(dimEigMatInVec,[],1);
-
-                    % Dimension of the data. Eigen::Matrix column-weise. Eigen data is the innermost
-                    dimAll = [dimStdVec.', fliplr(dimEigMat)];   % use this format vector(outer)..vector(inner),Eigen::Matrix.numCols,Eigen::Matrix.numRows is to preserve column dimension by preventing auto-squeezing in Matlab
-                    numDimAll = length(dimAll);
-
-                    % Initialize Variables
-                    logData     = zeros(prod(dimAll),1);
-                    isFound     = true;
-                    isComplete  = false;
-                    isError     = false;
-                    errMsg      = '';
-
-                    % Use following indices to check if enough data are collected for each column of a Eigen::Matrix.
-                    % Align the writing index iData when the dimension of a Eigen::Matrix is smaller than the maximum dimension (dimEigMat)
-                    cntData     = 1;      % index writing to the result matrix
-                    cntVec      = 1;      % index of std::vector, the dimension of Eigen::Matrix in this std::vector may different
-                    currColInd  = 1;      % current column index inside one Eigen::Matrix
-                    currRowInd  = 1;      % current row index inside one Eigen::Matrix
-                    prevRowInd  = 1;      % previous row index inside one Eigen::Matrix
-                    iData       = 1;      % index of all Eigen::Matrix
+                if isempty(startInfo{3}) || isempty(startInfo{4}) % only convert Eigen::Matrix data
+                    processNextLine;
+                    continue;
                 end
+
+                % Check if the data is one line or spans multiple lines
+                numLeftBracket = sum(tLine=='{');
+                numRightBracket = sum(tLine=='}');
+                if numLeftBracket == numRightBracket
+                    isOneline = true;
+                end
+
+                % Detect if there are std::vector(s) outside Eigen::Matrix
+                resStdVec = regexp(startInfo{2}, 'std::vector of length ([\d]+), capacity ([\d]+)', 'tokens');
+                numStdVec = length(resStdVec);  % Number of std::vectors wrapping Eigen::Matrix
+                dimStdVec = zeros(numStdVec,1);
+                for i = 1:numStdVec
+                    dimStdVec(i) = str2double(resStdVec{i}{1});
+                end
+                % Note: if dimStdVec is empty, numElStdVec is 1, which is correct in our scenario.
+                numElStdVec = prod(dimStdVec);
+
+                % Dimension of Eigen::Matrix part, it may be different for each std::vector
+                dimEigMatInVec = zeros(numElStdVec, 2);
+
+                if isOneline % Has enough info by using this line
+                    dimEigMatMax = regexp(tLine, 'Eigen::Matrix<[\w:<>]+,(\d+),(\d+),\w+>','tokens');  % Record all Eigen::Matrix
+
+                    if length(dimEigMatMax) ~= numElStdVec  % #occurrence of Eigen::Matrix should equal to #elements of all std::vector
+                        disp('Error: Occurrence of Eigen::Matrix is not equal the sum of std::vector elements!');
+                        tLine = fgetl(fid);
+                        continue;
+                    end
+
+                    for i = 1:numElStdVec  % Put from cell to vector
+                        dimEigMatInVec(i,1) = str2double(dimEigMatMax{i}{1});
+                        dimEigMatInVec(i,2) = str2double(dimEigMatMax{i}{2});
+                    end
+                else  % Need to go next lines until this data block ends or new data block begins or end of file
+                    % Save the current position
+                    posFid = ftell(fid);
+
+                    % Use the number of '{' and '}' to check if the current data block ends
+                    cnt = 0;   % counter for multi-line case
+                    isNewData = false;
+                    tLineTmp = tLine;
+
+                    while  numLeftBracket~=numRightBracket && ~isNewData && cnt<numElStdVec
+                        % Search only for Eigen::Matrix
+                        dimEigMatMax = regexp(tLine, 'Eigen::Matrix<[\w:<>]+,(\d+),(\d+),[\w]+>','tokens');  % Record all dim of Eigen::Matrix
+
+                        % Get new line and check "{" and "}"
+                        tLine = fgetl(fid);
+                        numLeftBracket = numLeftBracket + sum(tLine=='{');
+                        numRightBracket = numRightBracket + sum(tLine=='}');
+
+                        if isempty(dimEigMatMax)
+                            continue;
+                        end
+
+                        if length(dimEigMatMax) ~= 1
+                            disp('Multi-line data can only have one Eigen::Matrix at one line.');
+                            break;
+                        end
+
+                        % Record all dim of Eigen::Matrix
+                        cnt = cnt + 1;
+                        dimEigMatInVec(cnt,1) = str2double(dimEigMatMax{1}{1});
+                        dimEigMatInVec(cnt,2) = str2double(dimEigMatMax{1}{2});
+
+                        % Check data block ending indicators. If the current data block ends, break the while.
+                        if ~ischar(tLine), isNewData = true; continue; end
+
+                        findTextGdb = regexp(tLine, 'gdb = std::vector of length','tokens', 'once');
+                        if ~isempty(findTextGdb), isNewData = true; continue; end
+
+                        findTextDollar = regexp(tLine, '\$(\d+) = std::vector of length','tokens', 'once');
+                        if ~isempty(findTextDollar)
+                            if str2double(findTextDollar{1}) ~= indCommand
+                                isNewData = true;
+                            end
+                        end
+                    end
+
+                    if cnt ~= numElStdVec
+                        disp('Error: Occurrence of Eigen::Matrix is not equal the sum of std::vector elements!');
+                        continue;
+                    else  % Data is fully collected
+                        % Go back to first line of the data
+                        fseek(fid,posFid,'bof');
+                        tLine = tLineTmp;
+                    end
+                end
+
+                dimEigMatMax = max(dimEigMatInVec,[],1);
+
+                % Dimension of the data. Eigen::Matrix column-weise. Eigen data is the innermost
+                dimAll = [dimStdVec.', fliplr(dimEigMatMax)];   % use this format vector(outer)..vector(inner),Eigen::Matrix.numCols,Eigen::Matrix.numRows is to preserve column dimension by preventing auto-squeezing in Matlab
+                numDimAll = length(dimAll);
+
+                % Initialize Variables
+                logData     = zeros(prod(dimAll),1);
+                isFound     = true;
+                isComplete  = false;
+                isError     = false;
+                errMsg      = '';
+
+                % Use following indices to check if enough data are collected for each column of a Eigen::Matrix.
+                % Align the writing index iData when the dimension of a Eigen::Matrix is smaller than the maximum dimension (dimEigMat)
+                cntData     = 1;      % index writing to the result matrix
+                cntVec      = 1;      % index of std::vector, the dimension of Eigen::Matrix in this std::vector may different
+                currColInd  = 1;      % current column index inside one Eigen::Matrix
+                currRowInd  = 1;      % current row index inside one Eigen::Matrix
+                prevRowInd  = 1;      % previous row index inside one Eigen::Matrix
+                iData       = 1;      % index of all Eigen::Matrix
 
                 if isFound
-                    [~,fileName,~] = fileparts(logFile{iFile});
-                    varPrint = regexp(tLinePrev, 'p(?:rint)?\s*(?:[\w\d]+[->.:]+)*([\w\d]+)', 'tokens', 'once');
-                    if isempty(varPrint)
-                        fname = [fileName, '_var', num2str(indCommand), '.mat'];
-                        disp(['Data $',num2str(indCommand),' is found! Start converting ...']);
+                    % Get variable name information from GDB log
+                    indCommand = str2double(startInfo{1});
+                    varNameIf = regexp(tLinePrev2, '^\$\d+\s*=\s*"IF\s*:\s*(\w+)"', 'tokens', 'once');
+                    varNameLog = regexp(tLinePrev1, 'p(?:rint)?\s*(?:[\w]+[->.:]+)*([\w]+)', 'tokens', 'once');
+                    convertingDataName = '';
+                    if ~isempty(varNameIf)    % When IF name is given, this will overwrite the variable name
+                        convertingDataName = varNameIf{1};
                     else
-                        fname = [fileName, '_var', num2str(indCommand), '_', varPrint{1}, '.mat'];
-                        disp(['Data $',num2str(indCommand),' ',varPrint{1},' is found! Start converting ...']);
+                        convertingDataName = ['var',num2str(indCommand)];
+                        if ~isempty(varNameLog{1})
+                            convertingDataName = [convertingDataName, '_', varNameLog{1}];
+                        end
                     end
+                    disp(['Data ', convertingDataName, ' is found! Start converting ...']);
                 end
             end
 
@@ -323,7 +345,7 @@ if ~isempty(logFile)
                             continue;
                         end
 
-                        % Write Data, complex-valued or real-valued
+                        % Write data, complex-valued or real-valued
                         writeData
                         cntData = cntData + 1;
 
@@ -334,17 +356,23 @@ if ~isempty(logFile)
 
                 % If data is complete in this data block
                 if isComplete
-                    % Reshape Data Back to Origin Dimensions
+                    % Reshape data back to origin dimensions
                     if numDimAll > 1
                         % Note: reshape will sequeeze out one-dim
                         logData = reshape(logData, fliplr(dimAll));
                         logData = permute(logData, [length(size(logData)):-1:3,1,2]);
-                        logData = reshape(logData, [dimStdVec.',dimEigMat]);
+                        logData = reshape(logData, [dimStdVec.',dimEigMatMax]);
                     end
 
-                    % Write into .mat file
+                    % Output this data
                     disp('Conversion done successfully!');
-                    save(fname,'logData','dimStdVec','dimEigMatInVec');
+                    out.(['file',num2str(iFile)]).fileName = convertingFileName;
+                    out.(['file',num2str(iFile)]).(convertingDataName).logData = logData;
+                    out.(['file',num2str(iFile)]).(convertingDataName).dimStdVec = dimStdVec;
+                    out.(['file',num2str(iFile)]).(convertingDataName).dimEigMatInVec = dimEigMatInVec;
+                    if outFileMode == 0
+                        save([convertingFileName, '_', convertingDataName,'.mat'],'logData','dimStdVec','dimEigMatInVec');
+                    end
 
                     % Reset parameters
                     isFound = false;
@@ -358,11 +386,22 @@ if ~isempty(logFile)
 
         end
 
+        % Finish converting this file
+        fclose(fid);
+        if outFileMode == 1
+            save([convertingFileName,'.mat'],"-fromstruct",out.(['file',num2str(iFile)]));
+        end
     end
 
-    fclose(fid);
-
 end
+
+
+    function processNextLine
+        % Save current two lines, read the new line
+        tLinePrev2 = tLinePrev1;
+        tLinePrev1 = tLine;
+        tLine = fgetl(fid);
+    end
 
     function checkDataIndex
         if isempty(resValue{iData}{2})
@@ -374,13 +413,13 @@ end
         prevRowInd = currRowInd;
         currRowInd = str2double(resValue{iData}{1}) + 1;
 
-        if cntData ~= (cntVec-1)*prod(dimEigMat) + (currColInd-1)*dimEigMat(1) + currRowInd % Track global counter and the corresponding index in a column
+        if cntData ~= (cntVec-1)*prod(dimEigMatMax) + (currColInd-1)*dimEigMatMax(1) + currRowInd % Track global counter and the corresponding index in a column
             isFound = false;
             isError = true;
             errMsg = 'Error: wrong data index!';
         end
 
-        if prevRowInd > currRowInd && prevRowInd ~= dimEigMat(1)    % New column, check if lack of Eigen::Matrix data of last column
+        if prevRowInd > currRowInd && prevRowInd ~= dimEigMatMax(1)    % New column, check if lack of Eigen::Matrix data of last column
             isFound = false;
             isError = true;
             errMsg = ['Error: The ', num2str(cntVec), ' std::vector has not enough data!'];
@@ -396,15 +435,15 @@ end
     end
 
     function checkEnoughDataThisColumn
-        if mod(cntData-1, dimEigMat(1)) == dimEigMatInVec(cntVec,1) || mod(cntData-1, dimEigMat(1)) == 0   % Enough data for this column
-            cntData     = cntData + dimEigMat(1) - dimEigMatInVec(cntVec,1);   % jump to the max row dim
-            currRowInd  = dimEigMat(1);
+        if mod(cntData-1, dimEigMatMax(1)) == dimEigMatInVec(cntVec,1) || mod(cntData-1, dimEigMatMax(1)) == 0   % Enough data for this column
+            cntData     = cntData + dimEigMatMax(1) - dimEigMatInVec(cntVec,1);   % jump to the max row dim
+            currRowInd  = dimEigMatMax(1);
             if currColInd == dimEigMatInVec(cntVec,2)  % If the last column, jump to the max col dim
-                cntData = cntData + dimEigMat(1) * ( dimEigMat(2) - dimEigMatInVec(cntVec,2) );
+                cntData = cntData + dimEigMatMax(1) * ( dimEigMatMax(2) - dimEigMatInVec(cntVec,2) );
                 cntVec  = cntVec + 1;   % std:vector index increases 1
             end
             % Check if all data are captured
-            if cntVec == numElsStdVec + 1
+            if cntVec == numElStdVec + 1
                 isComplete = true;
             end
         end
